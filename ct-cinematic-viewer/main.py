@@ -9,8 +9,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from dicom_processor import process_dicom_to_pointcloud
 from train_compress import setup_environment, train_model, compress_model, prepare_web_viewer, serve_web_viewer
-# Import the gsplat training module
-from train_gsplat import prepare_training_folder, train_3d_gaussians, prepare_web_viewer as gsplat_prepare_web_viewer
+from cloud_gpu import prepare_cloud_job, upload_data, download_results
 
 def main():
     parser = argparse.ArgumentParser(description="DICOM to Cinematic CT Viewer Pipeline")
@@ -26,7 +25,6 @@ def main():
     
     # Training options
     parser.add_argument("--iterations", type=int, default=30000, help="Number of training iterations")
-    parser.add_argument("--kernel_size", type=float, default=0.1, help="Initial kernel size for Gaussians")
     
     # Workflow options
     parser.add_argument("--skip_dicom", action="store_true", help="Skip DICOM processing")
@@ -34,8 +32,14 @@ def main():
     parser.add_argument("--serve", action="store_true", help="Start a web server after preparation")
     parser.add_argument("--port", type=int, default=8000, help="Port for the web server")
     
-    # Added rendering engine option
-    parser.add_argument("--use_gsplat", action="store_true", help="Use gsplat for training (Apple Silicon/Intel compatible)")
+    # GPU options
+    parser.add_argument("--use_cloud", action="store_true", help="Use cloud GPU instead of local GPU")
+    parser.add_argument("--cloud_provider", type=str, default="aws", choices=["aws", "gcp", "azure"], 
+                        help="Cloud provider to use")
+    parser.add_argument("--cloud_instance", type=str, default="g4dn.xlarge", 
+                        help="Cloud instance type (AWS: g4dn.xlarge, GCP: n1-standard-4-nvidia-tesla-t4)")
+    parser.add_argument("--cloud_region", type=str, default="us-west-2", 
+                        help="Cloud region to use")
     
     args = parser.parse_args()
     
@@ -73,73 +77,61 @@ def main():
     
     # Step 2: Setup environment
     print("\n=== Step 2: Setting up environment ===")
-    if not args.use_gsplat:
+    if not args.use_cloud:
         setup_environment()
     else:
-        print("Using gsplat for training (compatible with Apple Silicon/Intel)")
+        print(f"Setting up cloud environment on {args.cloud_provider}...")
     
     # Step 3 & 4: Train and compress 3D Gaussian model
     if not args.skip_training:
-        if not args.use_gsplat:
-            # Standard CUDA-based training and compression
-            print("\n=== Step 3: Training 3D Gaussian model (CUDA) ===")
+        if not args.use_cloud:
+            # Local GPU training
+            print("\n=== Step 3: Training 3D Gaussian model (local GPU) ===")
             train_model(scene_folder, model_output_folder, args.iterations)
             
             print("\n=== Step 4: Compressing model ===")
             compress_model(model_output_folder, compressed_output_folder, args.iterations)
-            
-            # Step 5: Prepare web viewer
-            print("\n=== Step 5: Preparing web viewer ===")
-            prepare_web_viewer(compressed_output_folder, web_output_folder)
         else:
-            # gsplat-based training (Apple Silicon/Intel compatible)
-            print("\n=== Step 3: Training 3D Gaussian model (gsplat) ===")
-            # Prepare training folder
-            train_dir = prepare_training_folder(point_cloud_file, camera_file, args.output_dir)
-            
-            # Train model
-            trained_model_path = train_3d_gaussians(
-                train_dir, 
-                os.path.join(args.output_dir, "model"),
-                args.iterations,
-                args.kernel_size
+            # Cloud GPU training
+            print(f"\n=== Step 3: Training 3D Gaussian model (cloud GPU - {args.cloud_provider}) ===")
+            # Create and set up cloud instance
+            instance_id = prepare_cloud_job(
+                args.cloud_provider, 
+                args.cloud_instance,
+                args.cloud_region
             )
             
-            # Step 4: Skip compression since gsplat produces optimized output
-            print("\n=== Step 4: Skipping separate compression step (not needed with gsplat) ===")
+            # Upload data to cloud
+            print(f"Uploading data to {args.cloud_provider}...")
+            upload_data(
+                args.cloud_provider,
+                instance_id,
+                scene_folder,
+                args.iterations
+            )
             
-            # Step 5: Prepare web viewer with gsplat output
-            print("\n=== Step 5: Preparing web viewer ===")
-            gsplat_prepare_web_viewer(trained_model_path, args.output_dir)
+            # Run training on cloud
+            print(f"Running training on {args.cloud_provider} (this may take several hours)...")
+            # This would be implemented in the cloud_gpu.py module
+            # The function would monitor the job and wait for completion
+            
+            # Download results from cloud
+            print(f"Downloading results from {args.cloud_provider}...")
+            download_results(
+                args.cloud_provider,
+                instance_id,
+                model_output_folder,
+                compressed_output_folder
+            )
+            
+            print(f"Cloud resources on {args.cloud_provider} have been released.")
     else:
         print("\n=== Steps 3 & 4: Skipping training and compression ===")
-        if not args.use_gsplat:
-            print(f"Assuming compressed model already exists in: {compressed_output_folder}")
-        else:
-            print(f"Assuming trained model already exists in: {model_output_folder}")
-        
-        # Step 5: Prepare web viewer
-        print("\n=== Step 5: Preparing web viewer ===")
-        if not args.use_gsplat:
-            prepare_web_viewer(compressed_output_folder, web_output_folder)
-        else:
-            # Look for the trained model
-            potential_paths = [
-                os.path.join(model_output_folder, f"point_cloud/iteration_{args.iterations}/point_cloud.ply"),
-                os.path.join(model_output_folder, "point_cloud/iteration_final/point_cloud.ply")
-            ]
-            
-            trained_model_path = None
-            for path in potential_paths:
-                if os.path.exists(path):
-                    trained_model_path = path
-                    break
-            
-            if trained_model_path:
-                gsplat_prepare_web_viewer(trained_model_path, args.output_dir)
-            else:
-                print(f"Warning: Could not find trained model. Using original point cloud.")
-                gsplat_prepare_web_viewer(point_cloud_file, args.output_dir)
+        print(f"Assuming compressed model already exists in: {compressed_output_folder}")
+    
+    # Step 5: Prepare web viewer
+    print("\n=== Step 5: Preparing web viewer ===")
+    prepare_web_viewer(compressed_output_folder, web_output_folder)
     
     # Step 6: Serve web viewer if requested
     if args.serve:
