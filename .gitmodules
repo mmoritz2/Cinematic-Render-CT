@@ -1,0 +1,6 @@
+[submodule "cinematic-gaussians"]
+	path = cinematic-gaussians
+	url = https://github.com/computational-imaging/gaussian-splatting.git
+[submodule "web-splat"]
+	path = web-splat
+	url = https://github.com/antimatter15/web-splat.git
