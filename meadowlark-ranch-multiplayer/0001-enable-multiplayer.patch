@@ -1,0 +1,332 @@
+From f2083c4b668b0c9cf7156eaf839bf412de5d9929 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Mon, 17 Aug 2026 21:26:22 +0000
+Subject: [PATCH] Enable multiplayer clubs by default
+
+Turn on the existing MQTT club layer so anyone who opens the ranch
+joins the public kestrel world, sees other riders, and can invite
+friends. ?solo=1 stays offline. Also sync jump height, show remotes
+on the maps, and auto-name new riders so they connect on first visit.
+---
+ DEVELOPMENT.md |  9 ++++--
+ README.md      | 15 ++++++----
+ index.html     |  8 +++---
+ ranch3d.html   | 77 ++++++++++++++++++++++++++++++++++++--------------
+ 4 files changed, 76 insertions(+), 33 deletions(-)
+
+diff --git a/DEVELOPMENT.md b/DEVELOPMENT.md
+index 44b452c..b2fe210 100644
+--- a/DEVELOPMENT.md
++++ b/DEVELOPMENT.md
+@@ -237,7 +237,8 @@ Game feel is hard, and a lot of this was iterative. The notable battles:
+ - **Multiplayer uses a free public broker** with no authentication. It's great
+   for playing with friends, but: anyone could in principle join a club code,
+   leaderboards are trust-based (no anti-cheat), and the broker could rate-limit
+-  or go down. A proper backend would be needed for anything serious.
++  or go down. A proper backend would be needed for anything serious. The shipped
++  build joins the public **kestrel** club automatically; `?solo=1` skips it.
+ - **Performance:** a 🎚️ graphics-quality button (High/Medium/Low) now scales
+   pixel ratio, shadow-map size, bloom, grass density, and cloud count — but
+   there's still no true level-of-detail system for distant objects.
+@@ -258,8 +259,10 @@ Game feel is hard, and a lot of this was iterative. The notable battles:
+    python3 -m http.server 8431
+    ```
+    then visit `http://localhost:8431/ranch3d.html`.
+-2. Your ranch auto-saves in the browser. To play with a friend, both join the
+-   same **club code** in the Club menu.
++2. Your ranch auto-saves in the browser. Opening the game joins the public
++   **kestrel** club so other riders appear nearby. Tap **🌐 Club** to pick a
++   name, copy an invite link, or switch to a private club code. Add `?solo=1`
++   to stay offline.
+ 
+ **Controls:** W/↑ ride · A/D steer · Shift gallop · Space jump (hold to fly on a
+ Pegasus) · drag to orbit the camera · 📷 for photos · or use the on-screen
+diff --git a/README.md b/README.md
+index d1e5d06..d8f6c1d 100644
+--- a/README.md
++++ b/README.md
+@@ -1,8 +1,8 @@
+ # Meadowlark Ranch 🐴
+ 
+ A cozy open-world horse game that runs in a browser tab. Ride across a 1000×1000
+-open world, care for and breed your horses, jump courses, and — on a headset —
+-ride the same world in VR.
++open world, care for and breed your horses, jump courses, play with friends in
++the same club, and — on a headset — ride the same world in VR.
+ 
+ Built from scratch in **one HTML file, no build step, no CDN**: clone it, serve the
+ folder, and it runs.
+@@ -18,6 +18,9 @@ python -m http.server 8431
+ ```
+ 
+ Then open <http://127.0.0.1:8431/>. Your ranch auto-saves to `localStorage`.
++Opening the game joins the public **kestrel** club so other riders appear in
++your world. Tap **🌐 Club** to pick a name, share an invite link, or use a
++private club code. Add `?solo=1` to the URL to stay offline.
+ 
+ For VR, serve over HTTPS (WebXR requires a secure origin) and press **Ride in VR**:
+ 
+@@ -83,7 +86,7 @@ horse when you meant to ride on the stick alone, so each can be picked outright.
+ | **Riding** | Speed-dependent gaits, jumping, show-jumping courses and cross-country flag races with timing, faults and trophies |
+ | **Living world** | Day/night with dusk window lights and fireflies, weather with rain and rainbows, wild horses to tame, NPC riders, and procedural wildlife |
+ | **VR** | Full WebXR mode — ride from the saddle holding the reins in your hands, with a world-space UI you operate with the controllers |
+-| **Multiplayer** | Club codes over MQTT to share a world, chat and compare boards — present in the code but **switched off** behind a `SOCIAL` flag, so the shipped build is single-player and contacts no server |
++| **Multiplayer** | Club codes over MQTT to share a world — see other riders, chat, compare boards, and breed with a club mate. The public **kestrel** club is joined automatically; `?solo=1` stays single-player |
+ 
+ <p align="center">
+   <img src="docs/screenshots/arena.png" width="49%" alt="The ranch arena">
+@@ -134,8 +137,10 @@ auto-rigging for the animated ones. `tools/asset-gen/` holds the scripts that dr
+ ## Honest limitations
+ 
+ - The rider is a stylised procedural figure, not a production character rig.
+-- Multiplayer, when enabled, uses a public MQTT broker — fine for a demo, not a game
+-  service. It ships switched off.
++- Multiplayer uses a public MQTT broker — fine for riding with friends, not a
++  hardened game service. Anyone with a club code can join it, boards are
++  trust-based, and the broker can rate-limit or go down. Add `?solo=1` to skip
++  the connection entirely.
+ - `ranch3d.html` is deliberately one large file. It is organised in sections, but it
+   is a single-author codebase, not a module structure a team would share.
+ - Terrain collision is height-field based, so very steep cliffs can be climbed.
+diff --git a/index.html b/index.html
+index 7bfe385..d6dedea 100644
+--- a/index.html
++++ b/index.html
+@@ -7,14 +7,14 @@
+ <meta http-equiv="Pragma" content="no-cache">
+ <meta property="og:type" content="website">
+ <meta property="og:title" content="Meadowlark Ranch">
+-<meta property="og:description" content="Ride, care for and breed horses across an open 3D ranch world. Runs in your browser — and in VR.">
++<meta property="og:description" content="Ride with friends across an open 3D ranch world. Care, breed, jump — in your browser, and in VR.">
+ <meta property="og:image" content="https://mmoritz2.github.io/meadowlark-ranch/preview.png">
+ <meta property="og:url" content="https://mmoritz2.github.io/meadowlark-ranch/">
+ <meta name="twitter:card" content="summary_large_image">
+ <meta name="twitter:title" content="Meadowlark Ranch">
+-<meta name="twitter:description" content="Ride, care for and breed horses across an open 3D ranch world. Runs in your browser — and in VR.">
++<meta name="twitter:description" content="Ride with friends across an open 3D ranch world. Care, breed, jump — in your browser, and in VR.">
+ <meta name="twitter:image" content="https://mmoritz2.github.io/meadowlark-ranch/preview.png">
+-<meta name="description" content="Ride, care for and breed horses across an open 3D ranch world. Runs in your browser — and in VR.">
++<meta name="description" content="Ride with friends across an open 3D ranch world. Care, breed, jump — in your browser, and in VR.">
+ <meta name="theme-color" content="#8fbf6a">
+ <title>Meadowlark Ranch 🐴✨</title>
+ <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐴</text></svg>">
+@@ -28,7 +28,7 @@ a{color:#2e86c1;font-weight:700}
+ <body>
+ <div class="card">
+  <h1>🐴 Meadowlark Ranch went fully 3D! ✨</h1>
+- <p>The whole ranch — your horses, care, shop, breeding, events and all your progress —<br>now lives in the open 3D world of Kestrel Basin.</p>
++ <p>The whole ranch — your horses, care, shop, breeding, events and all your progress —<br>now lives in the open 3D world of Kestrel Basin. Ride with friends in the same club.</p>
+  <p><a href="ranch3d.html" id="go">Ride on in →</a></p>
+ </div>
+ </body>
+diff --git a/ranch3d.html b/ranch3d.html
+index 3df5497..61cb810 100644
+--- a/ranch3d.html
++++ b/ranch3d.html
+@@ -6,14 +6,14 @@
+ <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+ <meta property="og:type" content="website">
+ <meta property="og:title" content="Meadowlark Ranch">
+-<meta property="og:description" content="Ride, care for and breed horses across an open 3D ranch world. Runs in your browser — and in VR.">
++<meta property="og:description" content="Ride with friends across an open 3D ranch world. Care, breed, jump — in your browser, and in VR.">
+ <meta property="og:image" content="https://mmoritz2.github.io/meadowlark-ranch/preview.png">
+ <meta property="og:url" content="https://mmoritz2.github.io/meadowlark-ranch/">
+ <meta name="twitter:card" content="summary_large_image">
+ <meta name="twitter:title" content="Meadowlark Ranch">
+-<meta name="twitter:description" content="Ride, care for and breed horses across an open 3D ranch world. Runs in your browser — and in VR.">
++<meta name="twitter:description" content="Ride with friends across an open 3D ranch world. Care, breed, jump — in your browser, and in VR.">
+ <meta name="twitter:image" content="https://mmoritz2.github.io/meadowlark-ranch/preview.png">
+-<meta name="description" content="Ride, care for and breed horses across an open 3D ranch world. Runs in your browser — and in VR.">
++<meta name="description" content="Ride with friends across an open 3D ranch world. Care, breed, jump — in your browser, and in VR.">
+ <meta name="theme-color" content="#8fbf6a">
+ <title>Meadowlark Ranch 🐴✨</title>
+ <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐴</text></svg>">
+@@ -122,7 +122,7 @@ button:active{transform:scale(.95)}
+  <button id="qualBtn" title="Graphics quality">🎚️</button>
+  <button id="muteBtn">🔊</button>
+ </div>
+-<div id="hint">W/↑ ride · A/D steer · Shift gallop · Space jump — or hold the 🐎 buttons, bottom right!</div>
++<div id="hint">W/↑ ride · A/D steer · Shift gallop · Space jump · 🌐 Club to ride with friends</div>
+ <div id="toasts"></div>
+ <canvas id="mini" width="140" height="140" title="Open the world map (M)"></canvas>
+ <div id="bigmapWrap"><div style="display:flex;flex-direction:column;align-items:center"><canvas id="bigmap" width="560" height="560"></canvas><div id="ftBar"></div></div></div>
+@@ -165,9 +165,8 @@ button:active{transform:scale(.95)}
+  <button id="tL">◀</button><button id="tGo">🐎</button><button id="tR">▶</button>
+  <button id="tGal">💨</button><button id="tJump">⤴</button><button id="tTrick">🌀</button>
+ </div>
+-<!-- The multiplayer client is only fetched if the social layer is switched on (see SOCIAL
+-     in the module). With it off this was 322 KB downloaded on every load for nothing. -->
+-<script>if(!/[?&]social=1/.test(location.search)){}else{document.write('<script src="assets\/vendor\/mqtt\/mqtt.min.js"><\/script>');}</script>
++<!-- Multiplayer is on by default. ?solo=1 skips the MQTT client (~322 KB) and stays offline. -->
++<script>if(/[?&]solo=1/.test(location.search)){}else{document.write('<script src="assets\/vendor\/mqtt\/mqtt.min.js"><\/script>');}</script>
+ <link rel="preload" href="assets/models/horse_textured_rigged.glb" as="fetch">
+ <script type="importmap">
+ {
+@@ -4943,7 +4942,7 @@ function updateRein(mesh,handObj,bitObj){
+ }
+ 
+ /* ================= player & herd ================= */
+-const player={mesh:null,parts:null,rider:null,pos:new THREE.Vector3(0,0,8),heading:Math.PI,speed:0,vy:0,y:0,phase:0,amp:0,lastStep:0,alt:false,earT:2,earA:0};
++const player={mesh:null,parts:null,rider:null,pos:new THREE.Vector3((Math.random()-0.5)*10,0,8+(Math.random()-0.5)*10),heading:Math.PI,speed:0,vy:0,y:0,phase:0,amp:0,lastStep:0,alt:false,earT:2,earA:0};
+ let nearMount=-1,mountHintT=0,lowNeedT=0;
+ let herd=[];
+ function rebuildAll(){
+@@ -5641,6 +5640,17 @@ function drawBigMap(){
+  const n=(sv&&sv.shoes&&sv.shoes.date===new Date().toDateString())?sv.shoes.got.length:0;
+  mc.font='700 14px "Trebuchet MS",sans-serif';
+  lbl(0,310,'🍀 Golden horseshoes today: '+n+'/'+SHOE_N+' — new hiding spots every day!');
++ if(SOCIAL){
++  mc.fillStyle='#3dba9a';
++  for(const r of Object.values(remotes)){
++   const rq=W2(r.x,r.z);
++   mc.beginPath();mc.arc(rq[0],rq[1],5,0,7);mc.fill();
++   mc.fillStyle='#fff';
++   mc.font='700 11px "Trebuchet MS",sans-serif';
++   mc.fillText(r.name,rq[0],rq[1]-8);
++   mc.fillStyle='#3dba9a';
++  }
++ }
+  const q=W2(player.pos.x,player.pos.z);
+  mc.save();
+  mc.translate(q[0],q[1]);
+@@ -5671,15 +5681,20 @@ addEventListener('keydown',e=>{
+ });
+ 
+ /* ================= online multiplayer: clubs, chat & friends =================
+-   SOCIAL gates this whole layer — the MQTT connection, chat, remote riders, profiles,
+-   friends, invite links and club rankings. With it off the game is purely single player
+-   and never contacts the broker; the code stays put so flipping this back to true
+-   restores everything. Trail Pass and milestone rewards are NOT social and stay on. */
+-const SOCIAL=false;
++   SOCIAL is on by default so anyone who opens the site can ride together. ?solo=1
++   turns the layer off (no MQTT, no club UI) for a purely local ranch. Trail Pass
++   and milestone rewards are NOT social and stay on either way. */
++const SOCIAL=!/[?&]solo=1/.test(location.search);
+ const net={client:null,id:'p'+Math.random().toString(36).slice(2,8),club:null,lastPub:0};
+ const remotes={};
++function clubHud(){
++ if(!SOCIAL)return;
++ const n=Object.keys(remotes).length;
++ const on=!!(net.client&&net.client.connected);
++ $('netBtn').textContent=on?(n?'🟢 '+n:'🟢 Club'):'🌐 Club';
++}
+ function netStatus(s){
+- $('netBtn').textContent=(s==='online'?'🟢 Club':'🌐 Club');
++ clubHud();
+ }
+ function chatMsg(name,text){
+  const d=document.createElement('div');
+@@ -5736,7 +5751,10 @@ function netConnect(){
+  const club=((s&&s.club)||'kestrel').toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,24)||'kestrel';
+  net.club=club;
+  try{
+-  net.client=mqtt.connect('wss://broker.emqx.io:8084/mqtt',{clientId:'srf_'+net.id,clean:true,connectTimeout:9000,reconnectPeriod:5000});
++  net.client=mqtt.connect('wss://broker.emqx.io:8084/mqtt',{
++   clientId:'srf_'+net.id,clean:true,connectTimeout:9000,reconnectPeriod:5000,
++   will:{topic:'srf1/'+club+'/chat',payload:JSON.stringify({id:net.id,n:myName(),t:'left the ranch'}),qos:0,retain:false}
++  });
+  }catch(e){netStatus('offline');return;}
+  net.client.on('connect',()=>{
+   netStatus('online');
+@@ -5744,7 +5762,7 @@ function netConnect(){
+   net.client.subscribe('srf1/'+club+'/chat');
+   net.client.subscribe('srf1/'+club+'/lb/#');
+   setTimeout(publishMyBoards,1500);
+-  toast('🟢 Connected to club "'+club+'" — riders who join it will appear in your world!');
++  toast('🟢 Riding in club "'+club+'" — tap 🌐 Club to invite a friend or pick a private code');
+   netSendChat('joined the club! 🐴');
+  });
+  net.client.on('message',(topic,payload)=>{
+@@ -5786,10 +5804,12 @@ function remoteUpdate(m){
+   tag.position.y=3.15;
+   parts.group.add(tag);
+   scene.add(parts.group);
+-  r=remotes[m.id]={parts,rider,name:nm,x:m.x,z:m.z,tx:m.x,tz:m.z,heading:m.h||0,sp:0,phase:Math.random()*6,lastSeen:0};
++  r=remotes[m.id]={parts,rider,name:nm,x:m.x,z:m.z,y:m.y||0,tx:m.x,tz:m.z,ty:m.y||0,heading:m.h||0,sp:0,phase:Math.random()*6,lastSeen:0};
+   chatMsg('🌐',nm+' is riding nearby!');
++  clubHud();
+  }
+  r.tx=m.x;r.tz=m.z;
++ r.ty=typeof m.y==='number'?m.y:0;
+  r.theading=m.h||0;
+  r.sp=m.sp||0;
+  r.lastSeen=0;
+@@ -5809,6 +5829,7 @@ function netTick(dt,t){
+   try{
+    net.client.publish('srf1/'+net.club+'/pos',JSON.stringify({
+     id:net.id,n:myName(),x:+player.pos.x.toFixed(1),z:+player.pos.z.toFixed(1),
++    y:+(player.y||0).toFixed(2),
+     h:+player.heading.toFixed(2),sp:+Math.abs(player.speed).toFixed(1),
+     c:h?h.colors:null,k:h?(h.tack||'#7a583a'):null,
+     s:(s.rider&&s.rider.shirt)||'#c98c5a',p:(s.rider&&s.rider.pants)||'#4a4338',
+@@ -5822,10 +5843,12 @@ function netTick(dt,t){
+   if(r.lastSeen>7){
+    scene.remove(r.parts.group);
+    delete remotes[id];
++   clubHud();
+    continue;
+   }
+   r.x+=(r.tx-r.x)*Math.min(1,dt*5);
+   r.z+=(r.tz-r.z)*Math.min(1,dt*5);
++  r.y=((r.y||0)+((r.ty||0)-(r.y||0))*Math.min(1,dt*5));
+   if(typeof r.theading==='number'){
+    let dh=r.theading-r.heading;
+    while(dh>Math.PI)dh-=Math.PI*2;
+@@ -5835,7 +5858,7 @@ function netTick(dt,t){
+   r.phase+=dt*(2.2+r.sp*1.9);
+   const g3=gaitFor(r.sp);
+   animateHorse(r.parts,r.phase,r.sp<0.2?0:g3.amp,g3,true,t,0,dt);
+-  r.parts.group.position.set(r.x,groundH(r.x,r.z),r.z);
++  r.parts.group.position.set(r.x,groundH(r.x,r.z)+(r.y||0),r.z);
+   r.parts.group.rotation.y=r.heading;
+   r.rider.g.rotation.x=-0.1;
+  }
+@@ -5853,7 +5876,7 @@ function openOnline(){
+  +'<div class="crow"><button id="netGo" style="flex:1">'+(net.client&&net.client.connected?'🔄 Rejoin':'🟢 Connect')+'</button><button id="netOff">Leave</button></div>'
+  +'<button id="netInvite" style="background:#e8f6e0">📨 Invite friends — copy a join link</button>'
+  +'<b style="font-size:13px">Riders here now ('+riders.length+')</b>'
+- +(riders.length?riders.map(r=>'<div class="evrow">🐴 <b>'+r.name+'</b><span>'+(r.horseName?'riding '+r.horseName:'')+'</span><button data-prof="'+r.name+'">👤 Profile</button><button data-friend="'+r.name+'">'+(isFriend(r.name)?'💚 Friend':'🤍 Befriend')+'</button></div>').join(''):'<span style="font-size:12px;color:#8c7a63">No one yet — share your club code with friends! Anyone who opens the game and joins the same club rides in your world.</span>')
++ +(riders.length?riders.map(r=>'<div class="evrow">🐴 <b>'+r.name+'</b><span>'+(r.horseName?'riding '+r.horseName:'')+'</span><button data-prof="'+r.name+'">👤 Profile</button><button data-friend="'+r.name+'">'+(isFriend(r.name)?'💚 Friend':'🤍 Befriend')+'</button></div>').join(''):'<span style="font-size:12px;color:#8c7a63">No one else here yet — the public club is <b>kestrel</b>. Share your invite link, or wait for another rider to open the game.</span>')
+  +(function(){
+   const roster=new Set();
+   Object.values(lbData).forEach(bd=>Object.keys(bd).forEach(nm2=>roster.add(nm2)));
+@@ -5937,7 +5960,13 @@ if(SOCIAL){
+   }
+  }
+ }
+-if(SOCIAL)setTimeout(()=>{const s=freshSave();if(s&&s.playerName)netConnect();},2500);
++if(SOCIAL)setTimeout(()=>{
++ syncSave(sv=>{
++  if(!sv.playerName)sv.playerName='Rider'+Math.floor(Math.random()*900+100);
++  if(!sv.club)sv.club='kestrel';
++ });
++ netConnect();
++},2500);
+ 
+ /* ================= leaderboards & milestone rewards ================= */
+ const lbData={};
+@@ -6336,7 +6365,7 @@ const ACHS=[
+  {id:'bond100',icon:'❤️',label:'Soulmates',desc:'Reach 100 bond with a horse',v:s=>Math.round(s.horses.reduce((m,h)=>Math.max(m,h.bond||0),0)),goal:100,r:{g:1}},
+  {id:'lvl5',icon:'⭐',label:'Rising star',desc:'Train a horse to level 5',v:s=>s.horses.reduce((m,h)=>Math.max(m,h.level||1),1),goal:5,r:{c:200}},
+  {id:'dist25k',icon:'🧭',label:'Trail blazer',desc:'Ride 25 km in total',v:s=>(s.stats&&s.stats.dist)||0,goal:25000,r:{g:1}},
+- {id:'friend1',social:true,icon:'🤝',label:'Club pal',desc:'Add a friend',v:s=>(s.friends||[]).length,goal:1,r:{c:100}},
++ {id:'friend1',social:true,icon:'🤝',label:'Club pal',desc:'Add a friend',v:s=>Object.keys(s.friends||{}).length,goal:1,r:{c:100}},
+  {id:'shoe25',icon:'🍀',label:'Lucky streak',desc:'Find 25 golden horseshoes',v:s=>(s.stats&&s.stats.shoesFound)||0,goal:25,r:{g:2}},
+  {id:'wild10',icon:'📸',label:'Wildlife photographer',desc:'Snap 10 wild animals with the camera',v:s=>(s.stats&&s.stats.wildPhotos)||0,goal:10,r:{g:1}},
+  {id:'shoe3',icon:'🧲',label:'Lucky shoes',desc:'Find 3 golden horseshoes',v:s=>((s.stats&&s.stats.shoesFound)||0)+Object.keys(s.shoes3d||{}).length,goal:3,r:{c:250}},
+@@ -7762,6 +7791,12 @@ function tick(){
+   for(const a of herd){const q=W2(a.pos.x,a.pos.z);mc.beginPath();mc.arc(q[0],q[1],2,0,7);mc.fill();}
+   mc.fillStyle='#ffb4a2';
+   for(const n of npcs){const q=W2(n.pos.x,n.pos.z);mc.beginPath();mc.arc(q[0],q[1],2.2,0,7);mc.fill();}
++  if(SOCIAL){
++   mc.fillStyle='#3dba9a';
++   for(const r of Object.values(remotes)){
++    const q=W2(r.x,r.z);mc.beginPath();mc.arc(q[0],q[1],2.6,0,7);mc.fill();
++   }
++  }
+   const pq=W2(player.pos.x,player.pos.z);
+   mc.save();
+   mc.translate(pq[0],pq[1]);
+-- 
+2.43.0
+
